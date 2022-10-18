@@ -1,6 +1,7 @@
 const express = require('express')
 const mongoose = require('mongoose')
 const bodyParser = require('body-parser')
+const cookieParser = require('cookie-parser')
 const config = require('./config/key')
 const app = express()
 const port = 8000
@@ -11,6 +12,9 @@ const port = 8000
 app.use(bodyParser.urlencoded({extended: true}));
 // application/json 타입을 분석해서 가져옴
 app.use(bodyParser.json());
+
+//이게 있어야 쿠키파서를 사용할 수 있음.
+app.use(cookieParser());
 
 const {User} = require("./models/User");
 
@@ -34,6 +38,36 @@ app.post('/register', (req, res) => {
     if(err)return res.json({ success: false, err})
     return res.status(200).json({
       success:true
+    })
+  })
+})
+// method 짜는 원리가 궁금함 
+app.post('/login', (req, res)=>{
+  // 1. 요청된 이메일을 DB에서 있는지 찾는다.
+  // findOne은 어디서 나온거지? => 몽고DB에서 나온 함수임
+  User.findOne({ email:req.body.email}, (err, user) =>{
+    if(!user){
+      return res.json({
+        loginSuccess : false,
+        message : "제공된 이메일에 해당하는 유저가 없습니다."
+      })
+    }
+    // 요청된 이메일을 DB에 있다면 맞는 pw인지 확인한다. 이때 2가지 인자를 넣는데 1는 사용자가 입력한 값 나머지 1은 콜백 함수
+    // 이렇게 없는 함수를 만들 땐 user model에 method를 만들어서 올려놓으면 된다. 즉, 우선순위는 con부분부터 만들어줘야함
+    user.comparePassword(req.body.password, (err, isMatch)=>{
+      if(!isMatch) return res.json({loginSuccess:false, message:"비번이 틀렸음"})
+
+      // 비밀번호까지 맞다면 token 생성한다.
+      user.generateToken((err, user)=>{
+        if(err) return res.status(400).send(err); 
+        // 토큰을 저장한다 어디에? user에 저장되어있는 것을 어느 scope에 저장시켜야함 일단 쿠키에 저장히켜보겠음
+        // 그런데 cookie parser라는 lib이 또 필요함 그래서 일단 설치하겠음
+        res.cookie("x_auth", user.token)
+        .status(200)
+        .json({loginSuccess:true, userId: user._id})
+        // 질문 loginSuccess는 어디서 나온것 인가? => json 형태니까 내가 그냥 지정한거임
+        // model인 user단에서의 generateToken 함수와 cotroller인 generateToken 함수의 차이 => 함수 정의는 user단 함수활용은 index에서
+      })
     })
   })
 })
